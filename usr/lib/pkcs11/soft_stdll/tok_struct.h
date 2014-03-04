@@ -398,6 +398,11 @@ token_spec_t token_specific = {
 	&token_specific_rsa_x509_verify,
 	&token_specific_rsa_x509_verify_recover,
 	&token_specific_rsa_generate_keypair,
+        // rsa_oaep and rsa_pss mechanisms 
+        NULL,                   // rsa_oaep_encrypt
+        NULL,                   // rsa_oaep_decrypt
+        NULL,                   // rsa_pss_sign
+        NULL,                   // rsa_pss_verify
 	// Elliptic Curve
 	NULL,			// ec_sign
 	NULL,			// ec_verify

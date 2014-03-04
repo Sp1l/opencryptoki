@@ -487,11 +487,22 @@ struct token_specific_struct {
 
 	CK_RV(*t_rsa_generate_keypair) (TEMPLATE *, TEMPLATE *);
 
+        // rsa_oaep and rsa_pss mechanisms
+        CK_RV(*t_rsa_oaep_encrypt) (CK_BYTE *, CK_ULONG,
+                                    CK_BYTE *, CK_ULONG *, OBJECT *);
+        CK_RV(*t_rsa_oaep_decrypt) (CK_BYTE *, CK_ULONG,
+                                    CK_BYTE *, CK_ULONG *, OBJECT *);
+        CK_RV(*t_rsa_pss_sign) (CK_BYTE *, CK_ULONG,
+                                CK_BYTE *, CK_ULONG *, OBJECT *);
+        CK_RV(*t_rsa_pss_verify) (CK_BYTE *, CK_ULONG,
+                                  CK_BYTE *, CK_ULONG, OBJECT *);
+
 	CK_RV(*t_ec_sign) (CK_BYTE *, CK_ULONG, CK_BYTE *, CK_ULONG *,
 			   OBJECT *);
 	CK_RV(*t_ec_verify) (CK_BYTE *, CK_ULONG, CK_BYTE *, CK_ULONG,
 			     OBJECT *);
 	CK_RV(*t_ec_generate_keypair) (TEMPLATE *, TEMPLATE *);
+
 
 	/* Begin code contributed by Corrent corp. */
 
@@ -570,6 +581,7 @@ struct token_specific_struct {
 				      CK_MECHANISM_INFO_PTR);
 
 	CK_RV (*t_object_add)(OBJECT *);
+
 };
 
 typedef struct token_specific_struct token_spec_t;
