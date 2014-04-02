@@ -1143,6 +1143,21 @@ typedef struct CK_MECHANISM_INFO {
 typedef CK_MECHANISM_INFO CK_PTR CK_MECHANISM_INFO_PTR;
 
 
+/* RSA mechanism OAEP encoding */
+typedef CK_ULONG CK_RSA_PKCS_MGF_TYPE;
+typedef CK_ULONG CK_RSA_PKCS_OAEP_SOURCE_TYPE;
+
+typedef struct CK_RSA_PKCS_OAEP_PARAMS {
+CK_MECHANISM_TYPE hashAlg;
+CK_RSA_PKCS_MGF_TYPE mgf;
+CK_RSA_PKCS_OAEP_SOURCE_TYPE source;
+CK_VOID_PTR pSourceData;
+CK_ULONG ulSourceDataLen;
+} CK_RSA_PKCS_OAEP_PARAMS;
+
+typedef CK_RSA_PKCS_OAEP_PARAMS CK_PTR CK_RSA_PKCS_OAEP_PARAMS_PTR;
+
+
 /* CK_RV is a value that identifies the return value of a
  * Cryptoki function */
 /* CK_RV was changed from CK_USHORT to CK_ULONG for v2.0 */

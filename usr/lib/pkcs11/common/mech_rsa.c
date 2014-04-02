@@ -1846,3 +1846,379 @@ ckm_rsa_key_pair_gen( TEMPLATE  * publ_tmpl,
 
    return rc;
 }
+
+
+// RSA mechanism - EME-OAEP encoding
+
+CK_RV
+encode_eme_oaep(CK_RSA_PKCS_OAEP_PARAMS oaepParms,
+		CK_ULONG modLength,     // k, the length in octets of RSA modulus n
+		CK_BYTE * mData,        // messsage to be encrypted
+		CK_ULONG mLen,          // message length (an octet string)
+		CK_BYTE * emData,       // encoded messsage
+		CK_ULONG emLen,         // encoded message length
+                CK_BYTE * label,	// (optional)
+		CK_ULONG lLen)
+{
+	char *		emptyStr = "";
+	CK_BYTE 	lHash[MAX_SHA_HASH_SIZE];	// 64 bytes
+	CK_RV		rc = CKR_OK;
+	CK_ULONG 	hLen = 0;			// the length of hash
+	CK_ULONG 	psLength = 0;			// the length of PS
+	CK_BYTE 	db[modLength];   		// a data block DB of length k – hLen – 1 octets
+	CK_BYTE	*	dbPtr;
+	CK_ULONG 	maskLen = 0;
+	CK_BYTE 	em[modLength];
+	CK_BYTE		hexOne[1];
+	int		i;
+
+        if (!mData || !emData)
+        {
+                OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+                return CKR_FUNCTION_FAILED;
+        }
+
+
+// a) If the label L is not provided, let L be the empty string. Let
+// lHash = Hash(L), an octet string of length hLen (see the note below).
+
+	if ( label == NULL )
+	{
+		*label=*emptyStr;
+		lLen=0;
+	}
+
+	switch ( oaepParms.hashAlg )	// CK_MECHANISM_TYPE
+	{
+
+		case CKM_SHA_1:
+
+			rc = compute_sha(label, lLen, lHash);
+			break;
+
+		case CKM_SHA256:
+
+			rc = compute_sha2(label, lLen, lHash);
+			break;
+
+		case CKM_SHA384:
+
+			rc = compute_sha3(label, lLen, lHash);
+			break;
+
+		case CKM_SHA512:
+
+			rc = compute_sha5(label, lLen, lHash);
+			break;
+
+		default:
+			OCK_LOG_ERR(ERR_MECHANISM_PARAM_INVALID);
+			return CKR_MECHANISM_PARAM_INVALID;
+
+	}
+
+	if ( rc != CKR_OK )
+	{
+		OCK_LOG_ERR(ERR_HASH_COMPUTATION);
+		return rc;
+	}
+
+
+	hLen = sizeof(lHash);
+
+
+// b. Generate an octet string PS consisting of
+//    k – mLen – 2hLen – 2 zero octets. The length of PS may be zero.
+//    k denotes the length in octets of the RSA modulous n
+
+	psLength = modLength-mLen-2*hLen-2;
+
+	CK_BYTE		ps[psLength];
+	memset(ps, 0x00, psLength);
+
+
+// c. Concatenate lHash, PS, a single octet with hexadecimal value 0x01, and
+//    the message M to form a data block DB of length k – hLen – 1 octets as
+//      DB = lHash || PS || 0x01 || M .
+
+	dbPtr = db;
+
+	memcpy( dbPtr, lHash, hLen);			// lHash
+	dbPtr += hLen;
+
+	memcpy( dbPtr, ps, psLength);			// PS
+	dbPtr += psLength;
+
+	memcpy( dbPtr, hexOne, 1);            		// hex 0x01
+	dbPtr++;
+
+	memcpy( dbPtr, mData, mLen);			// M
+
+
+// d. Generate a random octet string seed of length hLen.
+
+	CK_BYTE seed[hLen];
+	memset(seed, 0x00, hLen);
+	rc = rng_generate(seed, hLen);
+
+	if ( rc != CKR_OK )
+	{
+		return rc;
+	}
+
+// e. Let dbMask = MGF (seed, k – hLen – 1)
+// dbMask is an octet string of length hLen
+
+	maskLen = (modLength - hLen) - 1;
+	CK_BYTE		dbMask[maskLen];
+	memset(dbMask, 0x00, maskLen);
+
+	rc = mgf1(&seed, hLen, &dbMask, maskLen, oaepParms.mgf);
+
+	if ( rc != CKR_OK )
+	{
+		return rc;
+	}
+
+// f. Let maskedDB = DB xor dbMask.
+
+	CK_BYTE		maskedDB[maskLen];
+	CK_BYTE 	maskedSeed[hLen];
+	CK_BYTE 	seedMask[hLen];
+
+	memset(maskedDB, 0x00, maskLen);
+	memset(maskedSeed, 0x00, hLen);
+	memset(seedMask, 0x00, hLen);
+
+
+	for (i=0; i < sizeof(db); i++)
+	{
+		maskedDB[i] = db[i] ^ dbMask[i];
+	}
+
+
+// g. Let seedMask = MGF (maskedDB, hLen).
+
+	rc = mgf1(&maskedDB, maskLen, &seedMask, hLen, oaepParms.mgf);
+	if ( rc != CKR_OK )
+	{
+		return rc;
+	}
+
+
+// h. Let maskedSeed = seed xor seedMask.
+
+
+	for (i=0; i < sizeof(seed); i++)
+	{
+		maskedSeed[i] = seed[i] ^ seedMask[i];
+	}
+
+
+// i. Concatenate a single octet with hexadecimal value 0x00, maskedSeed, and
+// maskedDB to form an encoded message EM of length k octets as
+// 	EM = 0x00 || maskedSeed || maskedDB.
+
+	memcpy( emData + 1, maskedSeed, hLen);
+	memcpy( emData+hLen+1, maskedDB, maskLen);
+	emLen= sizeof(emData);		// note modLength should match with emLen, do we check that?
+
+
+}
+
+
+
+
+CK_RV
+decode_eme_oaep(CK_RSA_PKCS_OAEP_PARAMS oaepParms,
+		CK_ULONG modLength,     // k, the length in octets of RSA modulus n
+		CK_BYTE * emData,       // encoded messsage (input)
+		CK_ULONG emLen,         // encoded message length
+		CK_BYTE * mData,        // messsage to be encrypted (output)
+		CK_ULONG mLen,          // message length (an octet string)
+                CK_BYTE * label,	// (optional)
+		CK_ULONG lLen)
+{
+	char *		emptyStr = "";
+	CK_BYTE 	lHash[MAX_SHA_HASH_SIZE];	// 64 bytes
+	CK_RV		rc = CKR_OK;
+	CK_ULONG 	hLen = 0;			// length of hash
+	CK_BYTE 	db[modLength];   		// a data block DB of length k – hLen – 1 octets
+	CK_BYTE	*	dbPtr;
+	CK_ULONG 	psLength = 0;
+	CK_BYTE		y;
+	CK_ULONG	maskedDBLen = 0;
+	CK_BYTE		hexOne[1];
+	int		i;
+
+
+        if (!emData || !mData)
+        {
+                OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+                return CKR_FUNCTION_FAILED;
+        }
+
+	memset(lHash, 0x00, sizeof(lHash));
+	memset(db, 0x00, modLength);
+	memset(hexOne, 0x01, 1);
+
+
+// a) If the label L is not provided, let L be the empty string. Let
+// lHash = Hash(L), an octet string of length hLen.
+
+        if ( label == NULL )
+        {
+		*label=*emptyStr;
+		lLen=0;
+        }
+
+	switch ( oaepParms.hashAlg )	// CK_MECHANISM_TYPE
+	{
+
+		case CKM_SHA_1:
+
+			rc = compute_sha(label, lLen, lHash);
+			break;
+
+		case CKM_SHA256:
+
+			rc = compute_sha2(label, lLen, lHash);
+			break;
+
+		case CKM_SHA384:
+
+			rc = compute_sha3(label, lLen, lHash);
+			break;
+
+		case CKM_SHA512:
+
+			rc = compute_sha5(label, lLen, lHash);
+			break;
+
+		default:
+			OCK_LOG_ERR(ERR_MECHANISM_PARAM_INVALID);
+			return CKR_MECHANISM_PARAM_INVALID;
+
+	}
+
+	if ( rc != CKR_OK )
+	{
+		OCK_LOG_ERR(ERR_HASH_COMPUTATION);
+		return rc;
+	}
+
+
+	hLen = sizeof(lHash);
+
+
+// b. Separate the encoded message EM into a single octet Y, an octet string
+// maskedSeed of length hLen, and an octet string maskedDB of length k –
+// hLen – 1 as  EM = Y || maskedSeed || maskedDB .
+
+
+	CK_BYTE		maskedSeed[hLen];
+	CK_BYTE		maskedDB[maskedDBLen];
+        CK_BYTE         seed[hLen];
+        CK_BYTE         seedMask[hLen];
+        CK_BYTE         dbMask[maskedDBLen];
+
+	memset(maskedSeed, 0x00, hLen);
+	memset(maskedDB, 0x00, maskedDBLen);
+        memset(seed, 0x00, hLen);
+        memset(seedMask, 0x00, hLen);
+        memset(dbMask, 0x00, maskedDBLen);
+
+	maskedDBLen = (modLength - hLen) - 1;
+
+	memcpy( y, emData, 1);	// hex 0x01
+
+	// if Y is nonzero, output “decryption error” and stop.
+	if ( y != 0 )
+	{
+		OCK_LOG_ERROR("decryption error.\n");
+		return rc;
+	}
+
+	memcpy( maskedSeed, emData + 1, hLen );
+	memcpy( maskedDB, emData + hLen + 1, maskedDBLen );
+
+
+// c. Let seedMask = MGF (maskedDB, hLen).
+
+	rc = mgf1(&maskedDB, maskedDBLen, &seedMask, hLen, oaepParms.mgf);
+
+	if ( rc != CKR_OK )
+	{
+		return rc;
+	}
+
+// d. Let seed = maskedSeed  xor seedMask.
+
+	for (i=0; i < hLen; i++)
+	{
+		seed[i] = maskedSeed[i] ^ seedMask[i];
+	}
+
+// e. Let dbMask = MGF (seed, k – hLen – 1).
+
+	rc = mgf1(&seed, hLen, &dbMask, maskedDBLen, oaepParms.mgf);
+	if ( rc != CKR_OK )
+	{
+		return rc;
+	}
+
+// f. Let DB = maskedDB xor dbMask.
+
+	for (i=0; i < maskedDBLen; i++)
+	{
+		db[i] = maskedDB[i] ^ dbMask[i];
+	}
+
+// g. Separate DB into an octet string lHash’ of length hLen, a (possibly empty)
+// padding string PS consisting of octets with hexadecimal value 0x00, and a
+// message M as   DB = lHash’ || PS || 0x01 || M .
+
+	CK_BYTE lHashFromDb[hLen];
+	CK_BYTE ps[psLength];
+
+	memset(lHashFromDb, 0x00, hLen);
+	memset(ps, 0x00, psLength);
+
+
+	memcpy(lHashFromDb, db, hLen);
+
+	// If there is no octet with hexadecimal value 0x01 to separate
+	// PS from M, if lHash does not equal lHash’, output “decryption
+	// error” and stop.
+
+	rc = memcmp(lHashFromDb, lHash, hLen);
+	if ( rc != 0 )
+	{
+		OCK_LOG_ERROR("decryption error.\n");
+		return rc;
+	}
+
+
+	dbPtr = db + hLen;
+
+	while ( *dbPtr == 0x00 )
+		++dbPtr;	// increment the pointer
+
+
+	if ( *dbPtr == *hexOne )
+	{
+		++dbPtr; // increment the pointer one more time to pt. to the M.
+	}
+	else
+	{
+		OCK_LOG_ERROR("decryption error.\n");
+		return rc;
+	}
+
+
+	memcpy(mData, dbPtr, mLen);
+
+
+	return rc;
+
+}

@@ -818,6 +818,9 @@ CK_RV generate_master_key(CK_BYTE *key);
 
 CK_RV compute_md5( CK_BYTE *data, CK_ULONG len, CK_BYTE *hash );
 CK_RV compute_sha( CK_BYTE *data, CK_ULONG len, CK_BYTE *hash );
+CK_RV compute_sha2( CK_BYTE *data, CK_ULONG len, CK_BYTE *hash );
+CK_RV compute_sha3( CK_BYTE *data, CK_ULONG len, CK_BYTE *hash );
+CK_RV compute_sha5( CK_BYTE *data, CK_ULONG len, CK_BYTE *hash );
 
 CK_ULONG long_reverse( CK_ULONG x );
 
@@ -1058,6 +1061,30 @@ CK_RV  ckm_rsa_verify( CK_BYTE  * in_data,
                        CK_BYTE  * out_data,
                        CK_ULONG   out_data_len,
                        OBJECT   * key_obj );
+
+
+// RSA mechanism - EME-OAEP encoding
+
+CK_RV
+encode_eme_oaep(CK_RSA_PKCS_OAEP_PARAMS oaepParms,
+                CK_ULONG modLength,     // k, the length in octets of RSA modulus n
+                CK_BYTE * mData,        // messsage to be encrypted
+                CK_ULONG mLen,          // message length (an octet string)
+                CK_BYTE * emData,        // encoded messsage
+                CK_ULONG emLen,          // encoded message length
+                CK_BYTE * label,
+                CK_ULONG lLen);
+
+CK_RV
+decode_eme_oaep(CK_RSA_PKCS_OAEP_PARAMS oaepParms,
+                CK_ULONG modLength,     // k, the length in octets of RSA modulus n
+                CK_BYTE * emData,        // encoded messsage (input)
+                CK_ULONG emLen,          // encoded message length
+                CK_BYTE * mData,        // messsage to be encrypted (output)
+                CK_ULONG mLen,          // message length (an octet string)
+                CK_BYTE * label,
+                CK_ULONG lLen);
+
 
 #ifndef NODSA
 // DSA routines
