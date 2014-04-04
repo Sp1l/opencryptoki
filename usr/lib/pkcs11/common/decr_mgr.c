@@ -647,6 +647,7 @@ decr_mgr_init( SESSION           *sess,
          break;
 
       case CKM_RSA_X_509:
+      case CKM_RSA_PKCS_OAEP:
       case CKM_RSA_PKCS:
          {
             if (mech->ulParameterLen != 0)
@@ -983,6 +984,13 @@ decr_mgr_decrypt( SESSION           *sess,
                                   ctx,
                                   in_data,  in_data_len,
                                   out_data, out_data_len );
+
+      case CKM_RSA_PKCS_OAEP:
+         return rsa_oaep_crypt( sess,     length_only,
+                                ctx,
+                                in_data,  in_data_len,
+                                out_data, out_data_len,
+				RSA_OAEP_DECRYPT, NULL, 0 );
 
       case CKM_RSA_X_509:
          return rsa_x509_decrypt( sess,     length_only,

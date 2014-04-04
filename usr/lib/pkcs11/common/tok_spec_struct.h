@@ -489,9 +489,11 @@ struct token_specific_struct {
 
         // rsa_oaep and rsa_pss mechanisms
         CK_RV(*t_rsa_oaep_encrypt) (CK_BYTE *, CK_ULONG,
-                                    CK_BYTE *, CK_ULONG *, OBJECT *);
+                                    CK_BYTE *, CK_ULONG *, OBJECT *,
+				    CK_BYTE *, CK_ULONG);
         CK_RV(*t_rsa_oaep_decrypt) (CK_BYTE *, CK_ULONG,
-                                    CK_BYTE *, CK_ULONG *, OBJECT *);
+                                    CK_BYTE *, CK_ULONG *, OBJECT *,
+				    CK_BYTE *, CK_ULONG);
         CK_RV(*t_rsa_pss_sign) (CK_BYTE *, CK_ULONG,
                                 CK_BYTE *, CK_ULONG *, OBJECT *);
         CK_RV(*t_rsa_pss_verify) (CK_BYTE *, CK_ULONG,

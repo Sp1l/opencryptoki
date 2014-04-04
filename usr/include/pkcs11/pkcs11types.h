@@ -396,6 +396,8 @@ typedef struct CK_INFO {
 
 typedef CK_INFO CK_PTR    CK_INFO_PTR;
 
+#define RSA_OAEP_ENCRYPT 1
+#define RSA_OAEP_DECRYPT 0
 
 /* CK_NOTIFICATION enumerates the types of notifications that
  * Cryptoki provides to an application */

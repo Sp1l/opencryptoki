@@ -745,6 +745,113 @@ rsa_pkcs_decrypt( SESSION           *sess,
 //
 //
 CK_RV
+rsa_oaep_crypt( SESSION           *sess,
+                  CK_BBOOL           length_only,
+                  ENCR_DECR_CONTEXT *ctx,
+                  CK_BYTE           *in_data,
+                  CK_ULONG           in_data_len,
+                  CK_BYTE           *out_data,
+                  CK_ULONG          *out_data_len,
+		  CK_BBOOL           encrypt,	// if false, decrypt
+		  CK_BYTE           *label,	// optional parm
+		  CK_ULONG           lLen)	// optional parm
+{
+   OBJECT          *key_obj  = NULL;
+   CK_ULONG         modulus_bytes;
+   CK_ULONG         modulus_bytes_in_length;
+   CK_ULONG         modulus_bytes_out_length;
+   CK_OBJECT_CLASS  keyclass;
+   CK_RV            rc;
+
+
+   rc = object_mgr_find_in_map1( ctx->key, &key_obj );
+   if (rc != CKR_OK){
+      OCK_LOG_ERR(ERR_OBJMGR_FIND_MAP);
+      return rc;
+   }
+
+   rc = rsa_get_key_info(key_obj, &modulus_bytes, &keyclass);
+   if (rc != CKR_OK) {
+      OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+      return CKR_FUNCTION_FAILED;
+   }
+
+   // check input data length restrictions
+   //
+   if ( encrypt )
+   {
+   	modulus_bytes_in_length = modulus_bytes - 11;
+   	modulus_bytes_out_length = modulus_bytes;
+   }
+   else // decrypt
+   {
+   	modulus_bytes_in_length = modulus_bytes;
+   	modulus_bytes_out_length = modulus_bytes - 11;
+   }
+   
+   if (in_data_len > modulus_bytes_in_length){
+      OCK_LOG_ERR(ERR_DATA_LEN_RANGE);
+      return CKR_DATA_LEN_RANGE;
+   }
+
+   if (length_only == TRUE) {
+      // this is not exact but it's the upper bound; otherwise we'll need
+      // to do the RSA operation just to get the required length
+      *out_data_len = modulus_bytes_out_length;
+      return CKR_OK;
+   }
+
+   if (*out_data_len < modulus_bytes_out_length) {
+      *out_data_len = modulus_bytes_out_length;
+      OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
+      return CKR_BUFFER_TOO_SMALL;
+   }
+
+   if ( encrypt )
+   {
+   	// this had better be a public key
+   	if (keyclass != CKO_PUBLIC_KEY){
+      		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+      		return CKR_FUNCTION_FAILED;
+   	}
+
+   	if( token_specific.t_rsa_oaep_encrypt == NULL ) {
+     		OCK_LOG_ERR(ERR_MECHANISM_INVALID);
+     		return CKR_MECHANISM_INVALID;
+   	}
+
+   	rc = token_specific.t_rsa_oaep_encrypt(in_data, in_data_len, out_data, out_data_len, key_obj, label, lLen);
+   	if (rc != CKR_OK)
+      		OCK_LOG_ERR(ERR_RSA_ENCRYPT); // this will change later
+
+   }
+   else // decrypt
+   {
+        // this had better be a private key
+        if (keyclass != CKO_PRIVATE_KEY){
+                OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+                return CKR_FUNCTION_FAILED;
+        }
+
+        if( token_specific.t_rsa_oaep_decrypt == NULL ) {
+                OCK_LOG_ERR(ERR_MECHANISM_INVALID);
+                return CKR_MECHANISM_INVALID;
+        }
+
+   	rc = token_specific.t_rsa_oaep_decrypt(in_data, in_data_len, out_data, out_data_len, key_obj, label, lLen);
+   	if (rc != CKR_OK)
+      		OCK_LOG_ERR(ERR_RSA_DECRYPT); // this will change later
+   }
+
+   return rc;
+}
+
+
+
+
+//
+//
+CK_RV
 rsa_pkcs_sign( SESSION             *sess,
                CK_BBOOL             length_only,
                SIGN_VERIFY_CONTEXT *ctx,
