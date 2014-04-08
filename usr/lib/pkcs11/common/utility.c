@@ -1010,23 +1010,43 @@ CK_RV detach_shm()
 	return rc;
 }
 
-CK_RV compute_sha(CK_BYTE * data, CK_ULONG len, CK_BYTE * hash)
+CK_RV compute_sha(CK_BYTE *data, CK_ULONG len, CK_BYTE *hash, CK_ULONG mech)
 {
 	// XXX KEY
 	DIGEST_CONTEXT ctx;
-	CK_ULONG hash_len = SHA1_HASH_SIZE;
+	CK_ULONG hash_len;
 	CK_RV rv;
 
 	memset(&ctx, 0x0, sizeof(ctx));
-
+	ctx.mech.mechanism = mech;
 	ckm_sha1_init(&ctx);
 	if (ctx.context == NULL)
 		return CKR_HOST_MEMORY;
 
-	if ((rv = ckm_sha1_update(&ctx, data, len)) != CKR_OK)
-		return rv;
-
-	return ckm_sha1_final(&ctx, hash, &hash_len);
+	switch(mech) {
+	case CKM_SHA_1:
+		hash_len = SHA1_HASH_SIZE;
+		if ((rv = ckm_sha1_update(&ctx, data, len)) != CKR_OK)
+			return rv;
+		return ckm_sha1_final(&ctx, hash, &hash_len);
+	case CKM_SHA256:
+		hash_len = SHA2_HASH_SIZE;
+		if ((rv = ckm_sha2_update(&ctx, data, len)) != CKR_OK)
+			return rv;
+		return ckm_sha2_final(&ctx, hash, &hash_len);
+	case CKM_SHA384:
+		hash_len = SHA3_HASH_SIZE;
+		if ((rv = ckm_sha3_update(&ctx, data, len)) != CKR_OK)
+			return rv;
+		return ckm_sha3_final(&ctx, hash, &hash_len);
+	case CKM_SHA512:
+		hash_len = SHA5_HASH_SIZE;
+		if ((rv = ckm_sha5_update(&ctx, data, len)) != CKR_OK)
+			return rv;
+		return ckm_sha5_final(&ctx, hash, &hash_len);
+	default:
+		return CKR_MECHANISM_INVALID;
+	}
 }
 
 CK_RV compute_md5(CK_BYTE * data, CK_ULONG len, CK_BYTE * hash)
