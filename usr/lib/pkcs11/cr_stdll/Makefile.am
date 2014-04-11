@@ -20,7 +20,7 @@ opencryptoki_stdll_libpkcs11_cr_la_SOURCES = ../common/asn1.c	\
 ../common/mech_sha.c ../common/mech_ssl3.c ../common/new_host.c	\
 ../common/obj_mgr.c ../common/object.c ../common/sess_mgr.c	\
 ../common/sign_mgr.c ../common/template.c ../common/utility.c	\
-../common/verify_mgr.c ../common/log.c ../common/mech_list.c    \
+../common/verify_mgr.c ../common/trace.c ../common/mech_list.c    \
 cr_specific.c
 
 INCLUDES = $(CR_INC_DIRS) -I/usr/include			\
