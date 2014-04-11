@@ -306,6 +306,7 @@
 
 #include "apictl.h"
 #include "msg.h"
+#include "trace.h"
 
 void *attach_shared_memory();
 void  detach_shared_memory(char *);
@@ -343,7 +344,5 @@ int sessions_exist(CK_SLOT_ID);
 #define OCK_LOG_ERR(errnum)
 #define OCK_LOG_DEBUG(fmt, ...)
 #endif
-#define OCK_SYSLOG(priority, fmt, ...) \
-        syslog(priority, "%s " fmt, __FILE__, ##__VA_ARGS__);
 
 #endif
