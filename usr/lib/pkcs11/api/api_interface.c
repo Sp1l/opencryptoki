@@ -303,6 +303,7 @@
 #include <slotmgr.h>
 #include <stdll.h>
 #include <apictl.h>
+#include "trace.h"
 
 #include <apiproto.h>
 
@@ -1647,6 +1648,8 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved)
 	// Unlock 
 	pthread_mutex_unlock(&GlobMutex);
 
+	trace_finalize();
+
 	return CKR_OK;
 }				// end of C_Finalize
 
@@ -2825,6 +2828,15 @@ CK_RV C_Initialize(CK_VOID_PTR pVoid)
 	CK_C_INITIALIZE_ARGS *pArg;
 	char fcnmap = 0;
 
+	trace_initialize();
+
+	TRACE_ERROR("Error test");
+	TRACE_WARNING("Warning test");
+	TRACE_INFO("Info test");
+	TRACE_DEBUG("Debug test");
+	TRACE_DEVEL("Devel test");
+	OCK_SYSLOG(LOG_ERR, "Testing syslog: %s", oerror(ERR_GENERAL_ERROR));
+
 	OCK_LOG_DEBUG("C_Initialize\n");
 	//if ( API_Proc_Struct NOT allocated )
 	//       allocate Structure
@@ -3014,8 +3026,10 @@ CK_RV C_Initialize(CK_VOID_PTR pVoid)
 		for (slotID = 0; slotID < NUMBER_SLOTS_MANAGED; slotID++) {
 			sltp = &(Anchor->SltList[slotID]);
 			confname = shData->slot_info[slotID].confname;
-			slot_loaded[slotID] = DL_Load_and_Init(sltp, slotID,
-							       confname);
+			slot_loaded[slotID] = DL_Load_and_Init(sltp, 
+								slotID, 
+								confname,
+								get_trace());
 		}
 
 	}

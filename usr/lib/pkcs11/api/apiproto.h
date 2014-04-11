@@ -316,7 +316,7 @@ int API_Initialized();
 void Terminate_All_Process_Sessions();
 int API_Register();
 void API_UnRegister();
-int DL_Load_and_Init(API_Slot_t *, CK_SLOT_ID, const char *);
+int DL_Load_and_Init(API_Slot_t *, CK_SLOT_ID, const char *, trace_handle_t *trace);
 
 
 CK_RV CreateXProcLock(void);
