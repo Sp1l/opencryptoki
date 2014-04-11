@@ -323,6 +323,7 @@
 #include "pkcs32.h"
 
 #include "../api/apiproto.h"
+#include "trace.h"
 
 #define UCHAR  unsigned char
 
@@ -561,10 +562,20 @@ CK_RV
 ST_Initialize(void **FunctionList,
 	      CK_SLOT_ID SlotNumber,
 	      char *Correlator,
-	      char *conf_name)
+	      char *conf_name,
+	      trace_handle_t *trace)
 {
 	int    i;
 	CK_RV  rc = CKR_OK;
+
+	set_trace(trace);
+
+	TRACE_ERROR("Error test");
+	TRACE_WARNING("Warning test");
+	TRACE_INFO("Info test");
+	TRACE_DEBUG("Debug test");
+	TRACE_DEVEL("Devel test");
+	OCK_SYSLOG(LOG_ERR, "Testing syslog: %s.", oerror(ERR_GENERAL_ERROR));
 
 	if ((rc = check_user_and_group()) != CKR_OK)
 		return rc;
