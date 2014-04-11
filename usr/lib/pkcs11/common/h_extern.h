@@ -310,6 +310,7 @@
 
 #include <stdio.h>
 #include "msg.h"
+#include "trace.h"
 
 #if (LEEDS_BUILD)
 #pragma options align=packed
@@ -2532,10 +2533,6 @@ void dump_shm(const char *);
 #define DUMP_SHM(x)
 
 #endif
-
-#define OCK_SYSLOG(priority, fmt, ...) \
-        syslog(priority, "%s " fmt, __FILE__, ##__VA_ARGS__);
-
 
 /* CKA_HIDDEN will be used to filter return results on a C_FindObjects call.
  * Used for objects internal to a token for management of that token */
