@@ -742,8 +742,108 @@ rsa_pkcs_decrypt( SESSION           *sess,
 }
 
 
-//
-//
+CK_RV rsa_oaep_crypt(SESSION *sess, CK_BBOOL length_only,
+		     ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
+		     CK_ULONG in_data_len, CK_BYTE *out_data,
+		     CK_ULONG *out_data_len, CK_BBOOL encrypt)
+{
+	OBJECT *key_obj  = NULL;
+	CK_ULONG modulus_bytes;
+	CK_OBJECT_CLASS keyclass;
+	CK_RV rc;
+
+	rc = object_mgr_find_in_map1(ctx->key, &key_obj);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_OBJMGR_FIND_MAP);
+		return rc;
+	}
+
+	rc = rsa_get_key_info(key_obj, &modulus_bytes, &keyclass);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+
+	// check input data length restrictions
+	//
+	if (encrypt) {
+
+		if (length_only == TRUE) {
+			*out_data_len = modulus_bytes;
+			return CKR_OK;
+		}
+
+		if (in_data_len > (modulus_bytes - 11)) {
+			OCK_LOG_ERR(ERR_DATA_LEN_RANGE);
+			return CKR_DATA_LEN_RANGE;
+		}
+		
+		if (*out_data_len < modulus_bytes) {
+			*out_data_len = modulus_bytes;
+			OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
+			return CKR_BUFFER_TOO_SMALL;
+		}
+
+		// this had better be a public key
+		if (keyclass != CKO_PUBLIC_KEY) {
+			OCK_LOG_DEBUG("rsa_oaep_crypt: encrypt requires public key.\n");
+			OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+			return CKR_FUNCTION_FAILED;
+		}
+
+		if (token_specific.t_rsa_oaep_encrypt == NULL) {
+			OCK_LOG_ERR(ERR_MECHANISM_INVALID);
+			return CKR_MECHANISM_INVALID;
+		}
+
+		rc = token_specific.t_rsa_oaep_encrypt(ctx, in_data,
+						       in_data_len, out_data,
+						       out_data_len);
+		if (rc != CKR_OK)
+      			OCK_LOG_ERR(ERR_RSA_ENCRYPT);
+		
+	} else {
+		// decrypt
+		if (in_data_len != modulus_bytes) {
+			OCK_LOG_ERR(ERR_ENCRYPTED_DATA_LEN_RANGE);
+			return CKR_ENCRYPTED_DATA_LEN_RANGE;
+		}
+		
+		if (length_only == TRUE) {
+			// this is not exact but it's the upper bound;
+			// otherwise we'll need to do the RSA operation
+			// just to get the required length
+			*out_data_len = modulus_bytes - 11;
+			return CKR_OK;
+		}
+
+		if (*out_data_len < (modulus_bytes - 11)) {
+			*out_data_len = modulus_bytes - 11;
+			OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
+			return CKR_BUFFER_TOO_SMALL;
+		}	
+
+		// this had better be a private key
+		if (keyclass != CKO_PRIVATE_KEY) {
+			OCK_LOG_DEBUG("rsa_oaep_crypt: decrypt requires private key.\n");
+			return CKR_FUNCTION_FAILED;
+		}
+
+		if (token_specific.t_rsa_oaep_decrypt == NULL) {
+			OCK_LOG_ERR(ERR_MECHANISM_INVALID);
+			return CKR_MECHANISM_INVALID;
+		}
+
+		 rc = token_specific.t_rsa_oaep_decrypt(ctx, in_data,
+							in_data_len, out_data,
+							out_data_len);
+		if (rc != CKR_OK)
+			OCK_LOG_ERR(ERR_RSA_DECRYPT);
+	}
+
+	return rc;
+}
+
 CK_RV
 rsa_pkcs_sign( SESSION             *sess,
                CK_BBOOL             length_only,
