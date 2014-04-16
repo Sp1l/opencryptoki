@@ -818,6 +818,8 @@ CK_RV generate_master_key(CK_BYTE *key);
 
 CK_RV compute_md5( CK_BYTE *data, CK_ULONG len, CK_BYTE *hash );
 CK_RV compute_sha(CK_BYTE *data, CK_ULONG len, CK_BYTE *hash, CK_ULONG mech);
+CK_RV mgf1(CK_BYTE *seed, CK_ULONG seedlen, CK_BYTE *mask, CK_ULONG maskLen,
+	   CK_RSA_PKCS_MGF_TYPE mgf);
 
 CK_ULONG long_reverse( CK_ULONG x );
 
@@ -1063,6 +1065,17 @@ CK_RV  ckm_rsa_verify( CK_BYTE  * in_data,
                        CK_BYTE  * out_data,
                        CK_ULONG   out_data_len,
                        OBJECT   * key_obj );
+
+
+// RSA mechanism - EME-OAEP encoding
+//
+CK_RV
+encode_eme_oaep(CK_BYTE *mData, CK_ULONG mLen, CK_BYTE *emData,
+		CK_ULONG modLength, CK_RSA_PKCS_OAEP_PARAMS oaepParms);
+
+CK_RV
+decode_eme_oaep(CK_BYTE *emData, CK_ULONG emLen, CK_BYTE *mData,
+		CK_ULONG modLength, CK_RSA_PKCS_OAEP_PARAMS oaepParms);
 
 #ifndef NODSA
 // DSA routines

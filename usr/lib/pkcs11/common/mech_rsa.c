@@ -2033,4 +2033,280 @@ done:
 	if (seed_buffer)
 		free(seed_buffer);
 	return rc;
+
+}
+
+// RSA mechanism - EME-OAEP encoding
+//
+CK_RV encode_eme_oaep(CK_BYTE *mData, CK_ULONG mLen, CK_BYTE *emData,
+		      CK_ULONG modLength, CK_RSA_PKCS_OAEP_PARAMS oaepParms)
+{
+        int i, hlen, ps_len, dbMask_len;
+        CK_BYTE *maskedSeed, *maskedDB, *dbMask;
+        CK_BYTE seed[MAX_SHA_HASH_SIZE];
+        CK_RV rc = CKR_OK;
+
+
+        if (!mData || !emData) {
+		OCK_LOG_DEBUG("encode_eme_oaep: invalid arguments passed in.\n");
+                return CKR_FUNCTION_FAILED;
+        }
+
+        switch(oaepParms.hashAlg) {
+        case CKM_SHA_1:
+                hlen = SHA1_HASH_SIZE;
+                break;
+        case CKM_SHA256:
+                hlen = SHA2_HASH_SIZE;
+                break;
+        case CKM_SHA384:
+                hlen = SHA3_HASH_SIZE;
+                break;
+        case CKM_SHA512:
+                hlen = SHA5_HASH_SIZE;
+                break;
+        default:
+                OCK_LOG_DEBUG("encode_eme_oaep: hashAlg is not supported\n");
+                return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        /* PKCS#11v2.20, section 12.1.7, if "source" is empty, 
+         * then pSourceData and ulSourceDatalen must be NULL, and zero
+         * respectively.
+         */
+        if ((!oaepParms.source) && (oaepParms.pSourceData != NULL) &&
+            (oaepParms.ulSourceDataLen != 0)) {
+                OCK_LOG_DEBUG("encode_eme_oaep: conflicting encoding parameter information.\n");
+                return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        /* pkcs1v2.2 Step i: 
+         * The encoded messages is a concatenated single octet, 0x00 with 
+         * maskedSeed and maskedDB to create encoded message EM.
+         * So lets mark of the places in our output buffer.
+         */
+        emData[0] = 0;
+        maskedSeed = emData + 1;
+        maskedDB = emData + hlen + 1;
+
+        /* pkcs1v2.2, Step a:
+         * Compute sha of Label.
+         */
+        rc = compute_sha(oaepParms.pSourceData, oaepParms.ulSourceDataLen,
+			 maskedDB, oaepParms.hashAlg);
+        if (rc != CKR_OK) {
+                OCK_LOG_DEBUG("encode_eme_oaep: Failed to compute hash.\n");
+                return CKR_FUNCTION_FAILED;
+        }
+
+        /* pkcs1v2.2, Step b:
+         * Generate an octet string PS and concatenate to DB.
+         */
+        ps_len = modLength - mLen - (2 * hlen) - 2;
+        memset(maskedDB + hlen, 0, ps_len);
+
+        /* pkcs1v2.2, Step c:
+         * We have already concatenated hash and PS to maskedDB.
+         * Now just concatenate 0x01 and message. */
+        maskedDB[hlen + ps_len] = 0x01;
+        memcpy(maskedDB + (hlen + ps_len + 1), mData, mLen);
+
+        /* pkcs1v2.2, Step d:
+         * Generate a random seed.
+         */
+        rc = rng_generate(seed, hlen);
+        if ( rc != CKR_OK )
+                return rc;
+
+        /* pkcs1v2.2, Step e:
+         * Compute dbmask using MGF1.
+         */
+        dbMask_len = modLength - hlen - 1;
+        dbMask = malloc(sizeof(CK_BYTE) * dbMask_len);
+        if (dbMask == NULL) {
+                OCK_LOG_DEBUG("encode_eme_oaep: Failed to malloc memory.\n");
+                return CKR_HOST_MEMORY;
+        }
+
+        rc = mgf1(seed, hlen, dbMask, dbMask_len, oaepParms.mgf);
+        if (rc != CKR_OK) {
+                OCK_LOG_DEBUG("encode_eme_oaep: Failed to compute MGF1.\n");
+                goto done;
+        }
+
+        /* pkcs1v2.2, Step f:
+         * Compute maskedDB.
+         */
+        for (i = 0; i < dbMask_len; i++)
+                maskedDB[i] ^= dbMask[i];
+
+        /* pkcs1v2.2, Step g:
+         * Compute seedMask using MGF1. 
+         */
+        memset(maskedSeed, 0, hlen);
+        rc = mgf1(maskedDB, dbMask_len, maskedSeed, hlen, oaepParms.mgf);
+        if (rc != CKR_OK) {
+                OCK_LOG_DEBUG("encode_eme_oaep: Failed to compute MGF1.\n");
+                goto done;
+        }
+
+        /* pkcs1v2.2, Step h:
+         * Compute maskedSeed.
+         */
+        for (i = 0; i < hlen; i++)
+                maskedSeed[i] ^= seed[i];
+
+done:
+        if (dbMask)
+                free(dbMask);
+
+        return rc;
+}
+
+CK_RV decode_eme_oaep(CK_BYTE * emData, CK_ULONG emLen, CK_BYTE * mData,
+		      CK_ULONG modLength, CK_RSA_PKCS_OAEP_PARAMS oaepParms)
+{
+        int   i;
+        CK_RV rc = CKR_OK;
+        CK_ULONG hlen, dbMask_len, ps_len, msg_len;
+        CK_BYTE *maskedSeed, *maskedDB, *dbMask, *seedMask, *msg;
+        CK_BYTE hash[MAX_SHA_HASH_SIZE];
+
+        if (!emData || !mData){
+		OCK_LOG_DEBUG("decode_eme_oaep: invalid arguments passed in.\n");
+                return CKR_FUNCTION_FAILED;
+        }
+
+        switch(oaepParms.hashAlg) {
+        case CKM_SHA_1:
+                hlen = SHA1_HASH_SIZE;
+                break;
+        case CKM_SHA256:
+                hlen = SHA2_HASH_SIZE;
+                break;
+        case CKM_SHA384:
+                hlen = SHA3_HASH_SIZE;
+                break;
+        case CKM_SHA512:
+                hlen = SHA5_HASH_SIZE;
+                break;
+        default:
+                OCK_LOG_DEBUG("encode_eme_oaep: hashAlg is not supported\n");
+                return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        /* PKCS#11v2.20, section 12.1.7, Step a: if "source" is empty, 
+         * then pSourceData and ulSourceDatalen must be NULL, and zero
+	 * respectively.
+         */
+        if ((!oaepParms.source) && (oaepParms.pSourceData != NULL) &&
+            (oaepParms.ulSourceDataLen != 0)) {
+                OCK_LOG_DEBUG("decode_eme_oaep: conflicting decoding parameter information.\n");
+                return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+        /* pkcs1v2.2, section 7.1.2, Step b:
+         * Separate the encoded message EM into a single octet Y, an octet 
+         * string maskedSeed of length hLen, and an octet string maskedDB
+         * of length k - hlen -1.
+         * Let's mark the places EM = Y || maskedSeed || maskedDB .
+         */
+        maskedSeed = emData + 1;
+        maskedDB = emData + hlen + 1;
+
+	/* pkcs1v2.2, section 7.1.2, Step g:
+	 * if Y is a nonzero, output "decryption error"
+	 */	
+	if (0x00 != emData[0])
+		return CKR_ENCRYPTED_DATA_INVALID;	
+
+        /* pkcs1v2.2, section 7.1.2, Step c:
+         * Compute seedMask using MGF1.
+         */
+        dbMask_len = modLength - hlen - 1;
+        seedMask = malloc(sizeof(CK_BYTE) * hlen);
+        if (seedMask == NULL) {
+                OCK_LOG_DEBUG("decode_eme_oaep: Failed to malloc memory.\n");
+                return CKR_HOST_MEMORY;
+        }
+        rc = mgf1(maskedDB, dbMask_len, seedMask, hlen, oaepParms.mgf);
+        if (rc != CKR_OK){
+                OCK_LOG_DEBUG("decode_eme_oaep: Failed to compute MGF1/\n");
+                goto done;
+        }
+
+        /* pkcs1v2.2, section 7.1.2, Step d:
+         * Compute seed using MGF1.
+         */
+        for (i=0; i < hlen; i++)
+                seedMask[i] ^= maskedSeed[i];
+
+        /* pkcs1v2.2, section 7.1.2, Step e:
+         * Compute dbMask using MGF1.
+         */
+        dbMask = malloc(sizeof(CK_BYTE) * dbMask_len);
+        if (dbMask == NULL) {
+                OCK_LOG_DEBUG("decode_eme_oaep: Failed to malloc memory.\n");
+                return CKR_HOST_MEMORY;
+        }
+
+        rc = mgf1(seedMask, hlen, dbMask, dbMask_len, oaepParms.mgf);
+        if ( rc != CKR_OK ){
+                OCK_LOG_DEBUG("decode_eme_oaep: Failed to compute MGF1/\n");
+                goto done;
+        }
+
+        /* pkcs1v2.2, section 7.1.2, Step f:
+         * Compute db using MGF1.
+         */
+        for (i=0; i < dbMask_len; i++)
+                dbMask[i] ^= maskedDB[i];
+
+        /* pkcs1v2.2, section 7.1.2, Step g:
+         * Separate DB into an octet string lHash’ of length hLen, a 
+         * (possibly empty) padding string PS consisting of octets with 
+         * hexadecimal value 0x00, and a message M as
+         * DB = lHash’ || PS || 0x01 || M .
+         * If there is no octet with hexadecimal value 0x01 to separate 
+         * PS from M, if lHash does not equal lHash’, output “decryption
+         * error” and stop. 
+         */
+        rc = compute_sha(oaepParms.pSourceData, oaepParms.ulSourceDataLen,
+			 hash, oaepParms.hashAlg);
+        if (rc != CKR_OK) {
+                OCK_LOG_DEBUG("decode_eme_oaep: Failed to compute hash.\n");
+                return CKR_FUNCTION_FAILED;
+        }
+
+        if (memcmp(dbMask, hash, hlen)) {
+		rc = CKR_ENCRYPTED_DATA_INVALID;	
+                goto done;
+        }
+
+        ps_len = hlen;
+        while ((dbMask[ps_len] == 0x00) && (ps_len < dbMask_len))
+                ps_len++;
+
+        if ((ps_len == dbMask_len) || (dbMask[ps_len] != 0x01)) {
+		rc = CKR_ENCRYPTED_DATA_INVALID;	
+		goto done;
+        }
+
+	msg = &dbMask[++ps_len]; 
+	msg_len = dbMask_len - ps_len; 
+	if (msg_len > modLength) {
+		rc = CKR_ENCRYPTED_DATA_INVALID;	
+		goto done;
+        }
+
+	memcpy(mData, msg, msg_len);	
+
+done:
+        if (seedMask)
+                free(seedMask);
+        if (dbMask)
+                free(dbMask);
+
+        return rc;
+
 }
