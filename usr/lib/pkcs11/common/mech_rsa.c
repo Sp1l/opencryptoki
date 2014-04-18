@@ -789,6 +789,17 @@ CK_RV rsa_oaep_crypt(SESSION *sess, CK_BBOOL length_only,
 		return CKR_FUNCTION_FAILED;
 	}
 
+	if (length_only == TRUE) {
+		*out_data_len = modulus_bytes;
+		return CKR_OK;
+	}
+
+	if (*out_data_len < modulus_bytes) {
+		*out_data_len = modulus_bytes;
+		OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
+		return CKR_BUFFER_TOO_SMALL;
+	}
+
 	/* To help mitigate timing and fault attacks when decrypting,
 	 * check oaep parameters that are passed in right now and compute
 	 * the hash of the Label.
@@ -798,8 +809,8 @@ CK_RV rsa_oaep_crypt(SESSION *sess, CK_BBOOL length_only,
 	 * respectively.
 	 */
 	oaepParms = (CK_RSA_PKCS_OAEP_PARAMS_PTR)ctx->mech.pParameter;
-	if (!(oaepParms->source) && !(oaepParms->pSourceData) &&
-	    (oaepParms->ulSourceDataLen)) {
+	if (!(oaepParms->source) && (oaepParms->pSourceData || 
+	    oaepParms->ulSourceDataLen)) {
 		OCK_LOG_ERR(ERR_MECHANISM_PARAM_INVALID);
                 return CKR_MECHANISM_PARAM_INVALID;
         }
@@ -832,22 +843,11 @@ CK_RV rsa_oaep_crypt(SESSION *sess, CK_BBOOL length_only,
 	//
 	if (encrypt) {
 
-		if (length_only == TRUE) {
-			*out_data_len = modulus_bytes;
-			return CKR_OK;
-		}
-
-		if (in_data_len > (modulus_bytes - 11)) {
+		if (in_data_len > (modulus_bytes - 2 * hlen - 2)) {
 			OCK_LOG_ERR(ERR_DATA_LEN_RANGE);
 			return CKR_DATA_LEN_RANGE;
 		}
 		
-		if (*out_data_len < modulus_bytes) {
-			*out_data_len = modulus_bytes;
-			OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
-			return CKR_BUFFER_TOO_SMALL;
-		}
-
 		// this had better be a public key
 		if (keyclass != CKO_PUBLIC_KEY) {
 			OCK_LOG_DEBUG("rsa_oaep_crypt: encrypt requires public key.\n");
@@ -871,20 +871,11 @@ CK_RV rsa_oaep_crypt(SESSION *sess, CK_BBOOL length_only,
 			return CKR_ENCRYPTED_DATA_LEN_RANGE;
 		}
 		
-		if (length_only == TRUE) {
-			// this is not exact but it's the upper bound;
-			// otherwise we'll need to do the RSA operation
-			// just to get the required length
-			*out_data_len = modulus_bytes - 11;
-			return CKR_OK;
+		if (modulus_bytes < (2 * hlen + 2)) {
+			OCK_LOG_ERR(ERR_KEY_FUNCTION_NOT_PERMITTED);
+			return CKR_KEY_FUNCTION_NOT_PERMITTED;
 		}
-
-		if (*out_data_len < (modulus_bytes - 11)) {
-			*out_data_len = modulus_bytes - 11;
-			OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
-			return CKR_BUFFER_TOO_SMALL;
-		}	
-
+		
 		// this had better be a private key
 		if (keyclass != CKO_PRIVATE_KEY) {
 			OCK_LOG_DEBUG("rsa_oaep_crypt: decrypt requires private key.\n");
@@ -901,6 +892,9 @@ CK_RV rsa_oaep_crypt(SESSION *sess, CK_BBOOL length_only,
 							out_data_len, hash,
 							hlen);
 	}
+
+	if (rc != CKR_OK)
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
 
 	return rc;
 }
@@ -2169,7 +2163,7 @@ CK_RV decode_eme_oaep(CK_BYTE *emData, CK_ULONG emLen, CK_BYTE *mData,
 	CK_BYTE *maskedSeed, *maskedDB, *dbMask, *seedMask, *msg;
 
 	if (!emData || !mData) {
-		OCK_LOG_DEBUG("CKR_FUNCTION_FAILED");
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
 		return CKR_FUNCTION_FAILED;
 	}
 

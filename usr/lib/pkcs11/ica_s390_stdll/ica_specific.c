@@ -2743,17 +2743,24 @@ CK_RV token_specific_rsa_oaep_encrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
 	CK_ATTRIBUTE *attr = NULL;
 	CK_BYTE *em_data = NULL;
 	CK_RSA_PKCS_OAEP_PARAMS_PTR oaepParms = NULL;
+	OBJECT *key_obj = NULL;
 
-	if (!in_data || !out_data) {
+	if (!in_data || !out_data || !hash) {
 		OCK_LOG_ERR(ERR_ARGUMENTS_BAD);
 		return CKR_ARGUMENTS_BAD;
 	}
 
 	oaepParms = (CK_RSA_PKCS_OAEP_PARAMS_PTR)ctx->mech.pParameter;
 
+	rc = object_mgr_find_in_map1(ctx->key, &key_obj);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_OBJMGR_FIND_MAP);
+		return rc;
+	}
+
 	flag = template_attribute_find(key_obj->template, CKA_MODULUS, &attr);
 	if (flag == FALSE) {
-		OCK_LOG_DEBUG("rsa-oaep: Could not find modulus in key.\n");
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
 		return CKR_FUNCTION_FAILED;
 	} else
 		modulus_bytes = attr->ulValueLen;
@@ -2763,27 +2770,70 @@ CK_RV token_specific_rsa_oaep_encrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
 	 */
 	em_data = (CK_BYTE *)malloc(modulus_bytes*sizeof(CK_BYTE));
 	if (em_data == NULL) {
-		OCK_LOG_DEBUG("rsa_oaep_encrypt: Failed to malloc memory.\n");
+		OCK_LOG_ERR(ERR_HOST_MEMORY);
 		return CKR_HOST_MEMORY;
 	}
 
 	rc = encode_eme_oaep(in_data, in_data_len, em_data, modulus_bytes,
 			     oaepParms->mgf, hash, hlen);
-        if (rc != CKR_OK) {
-		OCK_LOG_DEBUG("rsa_oaep_encrypt: EME-OAEP encoding failed.\n");
+        if (rc != CKR_OK)
 		goto done;
-        }
 
         rc = os_specific_rsa_encrypt(em_data, modulus_bytes, cipher, key_obj);
         if (rc == CKR_OK) {
                 memcpy(out_data, cipher, modulus_bytes);
                 *out_data_len = modulus_bytes;
         } else
-                OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
 
 done:
 	if (em_data)
 		free(em_data);
+        return rc;
+}
+
+
+CK_RV token_specific_rsa_oaep_decrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
+				      CK_ULONG in_data_len, CK_BYTE *out_data,
+				      CK_ULONG *out_data_len, CK_BYTE *hash,
+				      CK_ULONG hlen)
+{
+	CK_RV rc;
+	CK_BYTE *decr_data = NULL;
+	OBJECT *key_obj = NULL;
+	CK_RSA_PKCS_OAEP_PARAMS_PTR oaepParms = NULL;
+
+	if (!in_data || !out_data || !hash) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+
+	oaepParms = (CK_RSA_PKCS_OAEP_PARAMS_PTR)ctx->mech.pParameter;
+
+	rc = object_mgr_find_in_map1(ctx->key, &key_obj);
+	if (rc != CKR_OK)
+		return rc;
+
+	rc = os_specific_rsa_decrypt(in_data, in_data_len, decr_data, key_obj);
+	if (rc != CKR_OK)
+		return rc;
+
+	/* pkcs1v2.2, section 7.1.2 Step 2:
+	 * EME-OAEP decoding.
+	 */
+	decr_data = malloc(sizeof(CK_BYTE) * in_data_len);
+	if (decr_data == NULL) {
+		OCK_ERR_LOG(ERR_HOST_MEMORY);
+		return CKR_HOST_MEMORY;
+	}
+
+        rc = decode_eme_oaep(ctx->mech.pParameter, decr_data, in_data_len,
+                             out_data, out_data_len, oaepParms->mgf, hash,
+			     hlen);
+
+        if (decr_data)
+                free(decr_data);
+
         return rc;
 }
 
