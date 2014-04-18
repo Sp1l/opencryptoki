@@ -2731,11 +2731,10 @@ token_specific_rsa_x509_verify_recover(CK_BYTE *signature, CK_ULONG sig_len,
 	return rc;
 }
 
-CK_RV
-token_specific_rsa_oaep_encrypt(CK_BYTE *in_data, CK_ULONG in_data_len,
-				CK_BYTE *out_data, CK_ULONG *out_data_len,
-				OBJECT *key_obj,
-				CK_RSA_PKCS_OAEP_PARAMS oaepParms)
+CK_RV token_specific_rsa_oaep_encrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
+				      CK_ULONG in_data_len, CK_BYTE *out_data,
+				      CK_ULONG *out_data_len, CK_BYTE *hash,
+				      CK_ULONG hlen)
 {
 	CK_RV rc;
 	CK_BYTE cipher[MAX_RSA_KEYLEN];
@@ -2743,11 +2742,14 @@ token_specific_rsa_oaep_encrypt(CK_BYTE *in_data, CK_ULONG in_data_len,
 	CK_BBOOL flag;
 	CK_ATTRIBUTE *attr = NULL;
 	CK_BYTE *em_data = NULL;
+	CK_RSA_PKCS_OAEP_PARAMS_PTR oaepParms = NULL;
 
 	if (!in_data || !out_data) {
 		OCK_LOG_ERR(ERR_ARGUMENTS_BAD);
 		return CKR_ARGUMENTS_BAD;
 	}
+
+	oaepParms = (CK_RSA_PKCS_OAEP_PARAMS_PTR)ctx->mech.pParameter;
 
 	flag = template_attribute_find(key_obj->template, CKA_MODULUS, &attr);
 	if (flag == FALSE) {
@@ -2766,7 +2768,7 @@ token_specific_rsa_oaep_encrypt(CK_BYTE *in_data, CK_ULONG in_data_len,
 	}
 
 	rc = encode_eme_oaep(in_data, in_data_len, em_data, modulus_bytes,
-			     oaepParms);
+			     oaepParms->mgf, hash, hlen);
         if (rc != CKR_OK) {
 		OCK_LOG_DEBUG("rsa_oaep_encrypt: EME-OAEP encoding failed.\n");
 		goto done;
