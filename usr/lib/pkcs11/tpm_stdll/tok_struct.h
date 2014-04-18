@@ -102,17 +102,16 @@ struct token_specific_struct token_specific = {
 	&token_specific_rsa_sign,
 	&token_specific_rsa_verify,
 	&token_specific_rsa_verify_recover,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	&token_specific_rsa_generate_keypair,
-        // rsa_oaep and rsa_pss mechanisms 
+	NULL,			// rsa_x509_decrypt
+	NULL,			// rsa_x509_encrypt
+	NULL,			// rsa_x509_sign
+	NULL,			// rsa_x509_verify
+	NULL,			// x509_verify_recover
         NULL,                   // rsa_oaep_encrypt
         NULL,                   // rsa_oaep_decrypt
         NULL,                   // rsa_pss_sign
         NULL,                   // rsa_pss_verify
+	&token_specific_rsa_generate_keypair,
 	// Elliptic Curve
 	NULL,			// ec_sign
 	NULL,			// ec_verify
