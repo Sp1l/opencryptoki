@@ -2765,6 +2765,14 @@ CK_RV token_specific_rsa_oaep_encrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
 	} else
 		modulus_bytes = attr->ulValueLen;
 
+	/* pkcs1v2.2, section 7.1.1, Step 1b:
+	 * Check the message length.
+	 */
+	if (in_data_len > (modulus_bytes - (2 * hlen) - 2)) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+
 	/* pkcs1v2.2, section 7.1.1 Step 2:
 	 * EME-OAEP encoding.
 	 */
@@ -2802,6 +2810,9 @@ CK_RV token_specific_rsa_oaep_decrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
 	CK_BYTE *decr_data = NULL;
 	OBJECT *key_obj = NULL;
 	CK_RSA_PKCS_OAEP_PARAMS_PTR oaepParms = NULL;
+	CK_ULONG modulus_bytes;
+	CK_BBOOL flag;
+	CK_ATTRIBUTE *attr = NULL;
 
 	if (!in_data || !out_data || !hash) {
 		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
@@ -2814,16 +2825,31 @@ CK_RV token_specific_rsa_oaep_decrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *in_data,
 	if (rc != CKR_OK)
 		return rc;
 
+	flag = template_attribute_find(key_obj->template, CKA_MODULUS, &attr);
+	if (flag == FALSE) {
+		OCK_LOG_DEBUG("rsa-oaep: Could not find modulus in key.\n");
+		return CKR_FUNCTION_FAILED;
+	} else
+		modulus_bytes = attr->ulValueLen;
+
+	/* pkcs1v2.2, section 7.1.2, Step 1b and 1c:
+	 * Check the cipher length and the modulus length.
+         */
+	if ((in_data_len != modulus_bytes) || (modulus_bytes < (2 * hlen) + 2)) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+
 	rc = os_specific_rsa_decrypt(in_data, in_data_len, decr_data, key_obj);
 	if (rc != CKR_OK)
 		return rc;
 
-	/* pkcs1v2.2, section 7.1.2 Step 2:
+	/* pkcs1v2.2, section 7.1.2 Step 3:
 	 * EME-OAEP decoding.
 	 */
 	decr_data = malloc(sizeof(CK_BYTE) * in_data_len);
 	if (decr_data == NULL) {
-		OCK_ERR_LOG(ERR_HOST_MEMORY);
+		OCK_LOG_ERR(ERR_HOST_MEMORY);
 		return CKR_HOST_MEMORY;
 	}
 
