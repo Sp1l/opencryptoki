@@ -513,7 +513,7 @@ CK_RV token_specific_rsa_oaep_encrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *,
 					CK_BYTE *, CK_ULONG);
 
 CK_RV token_specific_rsa_oaep_decrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *,
-					CK_ULONG, CK_BYTE *, CK_ULONG,
+					CK_ULONG, CK_BYTE *, CK_ULONG *,
 					CK_BYTE *, CK_ULONG);
 
 CK_RV token_specific_rsa_pss_sign(ENCR_DECR_CONTEXT *ctx, CK_BYTE *, CK_ULONG,
