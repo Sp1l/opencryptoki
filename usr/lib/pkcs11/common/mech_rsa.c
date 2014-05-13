@@ -1418,6 +1418,94 @@ rsa_x509_verify_recover( SESSION             * sess,
    return rc;
 }
 
+CK_RV rsa_pss_sign(SESSION *sess, CK_BBOOL length_only, 
+		   SIGN_VERIFY_CONTEXT *ctx, CK_BYTE *in_data,
+		   CK_ULONG in_data_len, CK_BYTE *out_data,
+		   CK_ULONG *out_data_len)
+{
+	OBJECT *key_obj = NULL;
+	CK_ULONG modulus_bytes, hlen, emBits, emLen;
+	CK_OBJECT_CLASS keyclass;
+	CK_RV rc;
+	CK_RSA_PKCS_PSS_PARAMS_PTR pssParms = NULL;
+
+	if (!sess || !ctx || !out_data_len) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+		
+	rc = object_mgr_find_in_map1(ctx->key, &key_obj);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_OBJMGR_FIND_MAP);
+		return rc;
+	}
+
+	/* get modulus and key class */
+	rc = rsa_get_key_info(key_obj, &modulus_bytes, &keyclass);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+
+	/* pkcs1v2.2 8.1.1 describes emBits as length in bits of the
+	 * modulus - 1. It also says, the octet length of EM will be
+	 * one less than k if modBits - 1 is divisible by 8 and equal
+	 * to k otherwise. k is the length in octets of the modulus n.
+	 */
+	emBits = (modulus_bytes * 8) - 1;
+	if ((emBits % 8) == 0)
+		emLen = modulus_bytes - 1;
+	else
+		emLen = modulus_bytes;
+
+	if (length_only == TRUE) {
+		*out_data_len = emLen;
+		return CKR_OK;
+	}
+
+	pssParms = (CK_RSA_PKCS_PSS_PARAMS_PTR)ctx->mech.pParameter;
+        /* verify hashAlg now as well as get hash size. */
+        hlen = 0;
+        rc = get_sha_size(pssParms->hashAlg, &hlen);
+        if (rc != CKR_OK) {
+                OCK_LOG_ERR(ERR_MECHANISM_PARAM_INVALID);
+                return CKR_MECHANISM_PARAM_INVALID;
+        }
+
+	/* pkcs#11v2.2, 12.1.10 states that this mechanism does not
+	 * compute a hash value on the message to be signed.	
+	 * It assumes the input data is the hashed message.
+	 */
+	if (in_data_len != hlen) {
+		OCK_LOG_ERR(CKR_DATA_LEN_RANGE);
+		return CKR_DATA_LEN_RANGE;
+	}
+
+	if (*out_data_len < emLen) {
+		*out_data_len = emLen;
+		OCK_LOG_ERR(ERR_BUFFER_TOO_SMALL);
+		return CKR_BUFFER_TOO_SMALL;
+	}
+
+	/* this had better be a private key */
+	if (keyclass != CKO_PRIVATE_KEY) {
+		OCK_LOG_ERR(ERR_KEY_TYPE_INCONSISTENT);
+		return CKR_KEY_TYPE_INCONSISTENT;
+	}
+
+	if (token_specific.t_rsa_pss_sign == NULL) {	
+		OCK_LOG_ERR(ERR_MECHANISM_INVALID);
+		return CKR_MECHANISM_INVALID;
+	}
+	
+	rc = token_specific.t_rsa_pss_sign(ctx, in_data, in_data_len, out_data,
+					   out_data_len);
+	if (rc != CKR_OK)
+		OCK_LOG_ERR(ERR_RSA_SIGN);
+	
+	return rc;
+}
+
 
 //
 //

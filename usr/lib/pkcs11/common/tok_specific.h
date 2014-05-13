@@ -516,11 +516,11 @@ CK_RV token_specific_rsa_oaep_decrypt(ENCR_DECR_CONTEXT *ctx, CK_BYTE *,
 				      CK_ULONG, CK_BYTE *, CK_ULONG *,
 				      CK_BYTE *, CK_ULONG);
 
-CK_RV token_specific_rsa_pss_sign(ENCR_DECR_CONTEXT *ctx, CK_BYTE *, CK_ULONG,
+CK_RV token_specific_rsa_pss_sign(SIGN_VERIFY_CONTEXT *ctx, CK_BYTE *, CK_ULONG,
 				  CK_BYTE *, CK_ULONG *);
 
-CK_RV token_specific_rsa_pss_verify(ENCR_DECR_CONTEXT *ctx, CK_BYTE *, CK_ULONG,
-				    CK_BYTE *, CK_ULONG);
+CK_RV token_specific_rsa_pss_verify(SIGN_VERIFY_CONTEXT *ctx, CK_BYTE *,
+				    CK_ULONG, CK_BYTE *, CK_ULONG);
 
 CK_RV
 token_specific_ec_sign(CK_BYTE   * ,
