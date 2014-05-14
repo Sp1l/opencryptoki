@@ -1506,6 +1506,46 @@ CK_RV rsa_pss_sign(SESSION *sess, CK_BBOOL length_only,
 	return rc;
 }
 
+CK_RV rsa_pss_verify(SESSION *sess, SIGN_VERIFY_CONTEXT *ctx, CK_BYTE *in_data,
+		     CK_ULONG in_data_len, CK_BYTE *signature, CK_ULONG sig_len)
+{
+	OBJECT *key_obj = NULL;
+	CK_ULONG modulus_bytes, hlen, emBits, emLen;
+	CK_OBJECT_CLASS keyclass;
+	CK_RV rc;
+	CK_RSA_PKCS_PSS_PARAMS_PTR pssParms = NULL;
+
+	rc = object_mgr_find_in_map1(ctx->key, &key_obj);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_OBJMGR_FIND_MAP);
+		return rc;
+	}
+
+	/* get modulus and key class */
+	rc = rsa_get_key_info(key_obj, &modulus_bytes, &keyclass);
+	if (rc != CKR_OK) {
+		OCK_LOG_ERR(ERR_FUNCTION_FAILED);
+		return CKR_FUNCTION_FAILED;
+	}
+
+	/* this had better be a public key */
+	if (keyclass != CKO_PUBLIC_KEY) {
+		OCK_LOG_ERR(ERR_KEY_TYPE_INCONSISTENT);
+		return CKR_KEY_TYPE_INCONSISTENT;
+	}
+
+	if (token_specific.t_rsa_pss_verify == NULL) {	
+		OCK_LOG_ERR(ERR_MECHANISM_INVALID);
+		return CKR_MECHANISM_INVALID;
+	}
+	
+	rc = token_specific.t_rsa_pss_verify(ctx, in_data, in_data_len,
+					     signature, sig_len);
+	if (rc != CKR_OK)
+		OCK_LOG_ERR(ERR_RSA_SIGN);
+	
+	return rc;
+}
 
 //
 //
@@ -2491,11 +2531,11 @@ CK_RV emsa_pss_verify(SIGN_VERIFY_CONTEXT *ctx, CK_BYTE *in_data,
 	while ((buf[i] == 0) && ( i < plen))
 		i++;
 
-	if ((i != plen) || (buf[i] != 0x01))
+	if ((i != plen) || (buf[i++] != 0x01))
 		return CKR_SIGNATURE_INVALID;
 
 	/* pkcs1v2.2, Step 11: Get the salt from DB. */
-	salt = buf[++i];
+	salt = buf + i;
 
 	/* pkcs1v2.2, Step 12: Set M'. Note: Use end of buf. */
 	M = buf + (i + pssParms->sLen);
